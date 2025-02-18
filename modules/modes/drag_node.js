@@ -25,7 +25,7 @@ import {
 import { modeBrowse } from './browse';
 import { modeSelect } from './select';
 import { osmJoinWays, osmNode } from '../osm';
-import {utilArrayIntersection, utilArrayUnion, utilKeybinding} from '../util';
+import { utilArrayIntersection, utilArrayUnion, utilKeybinding } from '../util';
 import copyArray from 'lodash-es/_copyArray';
 
 
