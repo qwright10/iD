@@ -25,7 +25,8 @@ import {
 import { modeBrowse } from './browse';
 import { modeSelect } from './select';
 import { osmJoinWays, osmNode } from '../osm';
-import { utilArrayIntersection, utilKeybinding } from '../util';
+import {utilArrayIntersection, utilArrayUnion, utilKeybinding} from '../util';
+import copyArray from 'lodash-es/_copyArray';
 
 
 
@@ -37,7 +38,9 @@ export function modeDragNode(context) {
     var hover = behaviorHover(context).altDisables(true)
         .on('hover', context.ui().sidebar.hover);
     var edit = behaviorEdit(context);
+    var keybinding = utilKeybinding('drag-node');
 
+    var _prevGraph;
     var _nudgeInterval;
     var _restoreSelectedIDs = [];
     var _wasMidpoint = false;
@@ -96,6 +99,29 @@ export function modeDragNode(context) {
     }
 
 
+    function childNodeIdsOfSelection() {
+        var graph = context.graph();
+        var selectedIDs = context.selectedIDs();
+        var children = copyArray(selectedIDs);
+
+        for (var i = 0; i < selectedIDs.length; i++) {
+            var entity = context.hasEntity(selectedIDs[i]);
+
+            if (!entity) return [];
+
+            var currChilds = graph.childNodes(entity).map(function(node) { return node.id; });
+            if (!children.length) {
+                children = currChilds;
+                continue;
+            }
+
+            children = utilArrayUnion(children, currChilds);
+        }
+
+        return children;
+    }
+
+
     function origin(entity) {
         return context.projection(entity.loc);
     }
@@ -128,10 +154,11 @@ export function modeDragNode(context) {
 
 
     function start(d3_event, entity) {
+        var childNodes = childNodeIdsOfSelection();
+
         _wasMidpoint = entity.type === 'midpoint';
         var hasHidden = context.features().hasHiddenConnections(entity, context.graph());
-        _isCancelled = !context.editable() || d3_event.shiftKey || hasHidden;
-
+        _isCancelled = !context.editable() || d3_event.shiftKey || hasHidden || !childNodes.includes(entity.id);
 
         if (_isCancelled) {
             if (hasHidden) {
@@ -213,6 +240,8 @@ export function modeDragNode(context) {
                     loc = edge.loc;
                 }
             }
+
+            _prevGraph = context.graph();
         }
 
         context.replace(
@@ -442,7 +471,8 @@ export function modeDragNode(context) {
 
     function cancel() {
         drag.cancel();
-        context.enter(modeBrowse(context));
+        if (_prevGraph) context.pop();
+        context.enter(modeSelect(context, context.selectedIDs()));
     }
 
 
@@ -456,8 +486,16 @@ export function modeDragNode(context) {
 
 
     mode.enter = function() {
+        _prevGraph = null;
+
         context.install(hover);
         context.install(edit);
+
+        keybinding
+            .on('⎋', cancel, true);
+
+        d3_select(document)
+            .call(keybinding);
 
         d3_select(window)
             .on('keydown.dragNode', keydown)
@@ -472,6 +510,9 @@ export function modeDragNode(context) {
         context.ui().sidebar.hover.cancel();
         context.uninstall(hover);
         context.uninstall(edit);
+
+        d3_select(document)
+            .call(keybinding.unbind);
 
         d3_select(window)
             .on('keydown.dragNode', null)
